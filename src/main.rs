@@ -7,6 +7,14 @@ mod sgr_pixel;
 
 fn main() {
     let mut terminal = ratatui::init();
-    App::default().run(&mut terminal);
+
+    let path = std::env::args().nth(1);
+
+    let app = match path {
+        Some(path) => App::from_path(path),
+        None => App::default(),
+    };
+
+    app.run(&mut terminal);
     ratatui::restore();
 }

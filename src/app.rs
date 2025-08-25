@@ -1,4 +1,7 @@
-use std::io;
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use ratatui::{
     Terminal,
@@ -19,6 +22,7 @@ use crate::{canvas::Canvas, drawing::Drawing, sgr_pixel::EnableSgrPixel};
 pub struct App {
     should_quit: bool,
     s: String,
+    path: Option<PathBuf>,
     /// 畫作內容。
     drawing: Drawing,
     window_size: Option<WindowSize>,
@@ -30,6 +34,7 @@ impl Default for App {
         Self {
             should_quit: false,
             s: Default::default(),
+            path: None,
             drawing: Default::default(),
             window_size: window_size().ok(),
             canvas_area: Default::default(),
@@ -38,6 +43,21 @@ impl Default for App {
 }
 
 impl App {
+    pub fn from_path(path: impl AsRef<Path>) -> Self {
+        let path = path.as_ref().to_path_buf();
+        let text = fs::read_to_string(&path).expect("fail to read file");
+        let drawing = serde_json::from_str::<Drawing>(&text).expect("invalid data");
+
+        Self {
+            should_quit: false,
+            s: Default::default(),
+            path: Some(path),
+            drawing,
+            window_size: window_size().ok(),
+            canvas_area: None,
+        }
+    }
+
     /// 在給定終端上運行。
     pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) {
         // 啟用鼠標像素模式

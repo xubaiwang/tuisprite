@@ -1,5 +1,7 @@
 use ratatui::style::Color;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct Drawing {
     pub width: usize,
     pub height: usize,

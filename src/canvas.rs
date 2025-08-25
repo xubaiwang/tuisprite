@@ -17,6 +17,7 @@ impl<'a> Canvas<'a> {
 }
 
 impl<'a> Widget for Canvas<'a> {
+    /// 渲染
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
@@ -24,7 +25,7 @@ impl<'a> Widget for Canvas<'a> {
         let drawing = self.drawing;
         let half_height_ceil = drawing.height.div_ceil(2);
 
-        buf.set_style(area, Style::default().bg(Color::Black));
+        buf.set_style(area, Style::default().bg(Color::DarkGray));
 
         for i in 0..drawing.width {
             for half_j in 0..half_height_ceil {
@@ -46,7 +47,7 @@ impl<'a> Widget for Canvas<'a> {
 
                 match (top_color, bottom_color) {
                     (Color::Reset, Color::Reset) => {
-                        cell.set_style(Style::default());
+                        cell.set_style(Style::default().bg(Color::Gray));
                     }
                     (Color::Reset, c) => {
                         cell.set_char('▄');
