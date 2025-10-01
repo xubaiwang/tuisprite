@@ -1,30 +1,36 @@
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::PathBuf};
 
+use anyhow::Result;
 use ratatui::{
-    Terminal,
+    DefaultTerminal, Frame,
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        self,
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, MouseButton,
+            MouseEvent, MouseEventKind,
+        },
         execute,
         terminal::{WindowSize, window_size},
     },
-    layout::Rect,
-    prelude::Backend,
-    style::{Color, Style},
-    widgets::Widget,
+    layout::{Constraint, Layout, Rect},
 };
 
-use crate::{canvas::Canvas, drawing::Drawing, sgr_pixel::EnableSgrPixel};
+use crate::{
+    drawing::{Color, Drawing},
+    sgr_pixel::EnableSgrPixel,
+    widgets::{command_bar::CommandBar, status_bar::StatusBar, workspace::Workspace},
+};
 
-/// 程序狀態。
 pub struct App {
-    should_quit: bool,
-    s: String,
+    /// Whether the app should exit.
+    should_exit: bool,
     path: Option<PathBuf>,
-    /// 畫作內容。
+    /// The data of actual drawing.
     drawing: Drawing,
+
+    color: Color,
+
+    // Retained areas.
     window_size: Option<WindowSize>,
     canvas_area: Option<Rect>,
 }
@@ -32,9 +38,9 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            should_quit: false,
-            s: Default::default(),
+            should_exit: false,
             path: None,
+            color: Color::RED,
             drawing: Default::default(),
             window_size: window_size().ok(),
             canvas_area: Default::default(),
@@ -43,74 +49,141 @@ impl Default for App {
 }
 
 impl App {
-    pub fn from_path(path: impl AsRef<Path>) -> Self {
-        let path = path.as_ref().to_path_buf();
-        let text = fs::read_to_string(&path).expect("fail to read file");
-        let drawing = serde_json::from_str::<Drawing>(&text).expect("invalid data");
+    pub fn new(path: PathBuf) -> Result<Self> {
+        let text = fs::read_to_string(&path)?;
+        let mut drawing = serde_json::from_str::<Drawing>(&text)?;
 
-        Self {
-            should_quit: false,
-            s: Default::default(),
+        dbg!(drawing.validate());
+
+        Ok(Self {
+            should_exit: false,
             path: Some(path),
+            color: Color::RED,
             drawing,
             window_size: window_size().ok(),
             canvas_area: None,
-        }
+        })
     }
 
-    /// 在給定終端上運行。
-    pub fn run<B: Backend>(mut self, terminal: &mut Terminal<B>) {
-        // 啟用鼠標像素模式
-        execute!(io::stdout(), EnableMouseCapture, EnableSgrPixel).unwrap();
-
-        // 繪製-事件循環
-        loop {
-            terminal
-                .draw(|frame| {
-                    frame.render_widget(&mut self, frame.area());
-                })
-                .expect("failed to draw frame");
-
-            self.read_and_handle_event();
-            if self.should_quit {
-                break;
-            }
+    /// Run the app loop.
+    pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+        // validate the drawing
+        if !self.drawing.validate() {
+            panic!("drawing is invliad");
         }
-        // 清理鼠標
-        execute!(io::stdout(), DisableMouseCapture).unwrap();
+
+        enable_mouse()?;
+
+        while !self.should_exit {
+            terminal.draw(|frame| self.render(frame))?;
+            self.handle_event()?;
+        }
+
+        disable_mouse()?;
+
+        Ok(())
     }
 
-    /// 讀取並處理事件
-    pub fn read_and_handle_event(&mut self) {
+    /// We need to store retained state, so `&mut self` is used.
+    fn render(&mut self, frame: &mut Frame) {
+        // split layout into three
+        let layout = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+
+        frame.render_stateful_widget(
+            Workspace::new(&self.drawing),
+            layout[0],
+            &mut self.canvas_area,
+        );
+        frame.render_widget(StatusBar, layout[1]);
+        frame.render_widget(CommandBar, layout[2]);
+    }
+
+    fn handle_event(&mut self) -> Result<()> {
         let event = event::read().expect("failed to read event");
-        // self.s = format!("{event:?}");
 
         match event {
-            Event::Key(key_event) => {
-                if key_event.code == KeyCode::Char('q') {
-                    self.should_quit = true;
-                }
+            Event::Key(key) => self.on_key(key)?,
+            Event::Mouse(mouse) => self.on_mouse(mouse),
+            // NOTE: we need both cell size and pixel size, so the resize event fields is not used.
+            Event::Resize(_, _) => self.on_resize(),
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    /// Handle key event.
+    fn on_key(&mut self, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Char('q') => {
+                self.should_exit = true;
             }
-            Event::Mouse(mouse_event) => {
-                if let Some((px, py)) = self.viewport_to_canvas(mouse_event.column, mouse_event.row)
-                {
-                    if let Some(pixel) = self.drawing.pixel_mut(px as usize, py as usize) {
-                        self.s = format!("px = {px}, py = {py}");
-                        *pixel = Color::Red;
-                    }
-                } else {
-                    // self.s = "canvas cood is None".into();
-                }
+            KeyCode::Char('w') => {
+                self.write()?;
             }
-            Event::Resize(_, _) => {
-                self.window_size = window_size().ok();
+            KeyCode::Char('1') => {
+                self.color = Color::RED;
+            }
+            KeyCode::Char('2') => {
+                self.color = Color::GREEN;
+            }
+            KeyCode::Char('3') => {
+                self.color = Color::BLUE;
+            }
+            KeyCode::Char('4') => {
+                self.color = Color::BLACK;
             }
             _ => {}
         }
+        Ok(())
     }
 
-    /// 視口轉畫布座標。
-    pub fn viewport_to_canvas(&self, x: u16, y: u16) -> Option<(u16, u16)> {
+    fn write(&self) -> Result<()> {
+        if let Some(path) = &self.path {
+            fs::write(path, serde_json::to_string(&self.drawing)?)?;
+        }
+        Ok(())
+    }
+
+    /// Handle mouse event.
+    fn on_mouse(&mut self, mouse: MouseEvent) {
+        if let Some((px, py)) = self.viewport_to_canvas(mouse.column, mouse.row) {
+            if let Some(pixel) = self.drawing.pixel_mut(px as usize, py as usize) {
+                match mouse.kind {
+                    MouseEventKind::Down(mouse_button) | MouseEventKind::Drag(mouse_button) => {
+                        match mouse_button {
+                            MouseButton::Left => {
+                                *pixel = self.color;
+                            }
+                            MouseButton::Right => {
+                                *pixel = Color::RESET;
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            // self.s = "canvas cood is None".into();
+        }
+    }
+
+    /// Handle resize event.
+    fn on_resize(&mut self) {
+        // NOTE: window_size return size in both cells and pixels
+        self.window_size = crossterm::terminal::window_size().ok()
+    }
+
+    /// Transform viewport position to canvas position.
+    ///
+    /// Return `None` when position is outside canvas.
+    fn viewport_to_canvas(&self, x: u16, y: u16) -> Option<(u16, u16)> {
         let window_size = self.window_size.as_ref()?;
         let canvas_area = self.canvas_area.as_ref()?;
 
@@ -125,23 +198,14 @@ impl App {
     }
 }
 
-impl Widget for &mut App {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
-        // 渲染畫布。
-        Canvas::new(&self.drawing).render(area, buf);
-        self.canvas_area = Some(area);
+/// Enable mouse and SGR Pixel mode.
+fn enable_mouse() -> Result<()> {
+    execute!(io::stdout(), EnableMouseCapture, EnableSgrPixel)?;
+    Ok(())
+}
 
-        // 渲染事件
-        buf.set_string(0, area.bottom() - 1, &self.s, Style::default());
-        // 渲染窗口大小
-        buf.set_string(
-            0,
-            area.bottom() - 2,
-            format!("{:?}", window_size()),
-            Style::default(),
-        );
-    }
+/// Disable mouse and SGR Pixel mode.
+fn disable_mouse() -> Result<()> {
+    execute!(io::stdout(), DisableMouseCapture)?;
+    Ok(())
 }

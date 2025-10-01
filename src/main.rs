@@ -1,20 +1,18 @@
-use crate::app::App;
+use anyhow::Result;
+use clap::Parser;
+
+use crate::{app::App, cli::Args};
 
 mod app;
-mod canvas;
+// mod canvas;
+mod cli;
 mod drawing;
 mod sgr_pixel;
+mod widgets;
 
-fn main() {
-    let mut terminal = ratatui::init();
-
-    let path = std::env::args().nth(1);
-
-    let app = match path {
-        Some(path) => App::from_path(path),
-        None => App::default(),
-    };
-
-    app.run(&mut terminal);
-    ratatui::restore();
+fn main() -> Result<()> {
+    let args = Args::parse();
+    let app = App::new(args.path)?;
+    ratatui::run(|terminal| app.run(terminal))?;
+    Ok(())
 }
