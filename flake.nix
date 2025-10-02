@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
   outputs =
@@ -11,12 +12,20 @@
       self,
       nixpkgs,
       flake-utils,
+      rust-overlay,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs {
           inherit system;
+          overlays = [ rust-overlay.overlays.default ];
+        };
+        toolchain = pkgs.rust-bin.nightly.latest.default.override {
+          extensions = [
+            "rust-src"
+            "rust-analyzer"
+          ];
         };
       in
       {
@@ -24,19 +33,15 @@
           with pkgs;
           mkShell {
             packages = [
-              rust-analyzer
-              clippy
-              rustfmt
+              toolchain
+              cargo-bloat
             ];
             buildInputs = [
             ];
             nativeBuildInputs = [
               pkg-config
-              rustc
-              cargo
             ];
 
-            # https://github.com/NixOS/nixpkgs/issues/177952#issuecomment-3172381779
             NIX_NO_SELF_RPATH = true;
           };
       }

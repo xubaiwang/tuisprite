@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Color is defined as RGBA color tuple.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct Color([u8; 4]);
+pub struct Color(pub [u8; 4]);
 
 impl Color {
     pub const RESET: Color = Color([0; 4]);

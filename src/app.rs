@@ -1,6 +1,27 @@
-use std::{fs, io, path::PathBuf};
+use std::{
+    cell::RefCell,
+    fs, io,
+    path::PathBuf,
+    sync::{Arc, mpsc},
+};
 
+use andromeda_core::{HostData, RuntimeHostHooks};
+use andromeda_runtime::RuntimeMacroTask;
 use anyhow::Result;
+use nova_vm::{
+    ecmascript::{
+        builtins::{ArgumentsList, BuiltinFunctionArgs, create_builtin_function},
+        execution::{
+            Agent, JsResult,
+            agent::{self, GcAgent, Options, RealmRoot},
+        },
+        scripts_and_modules::script::{parse_script, script_evaluation},
+        types::{
+            self, InternalMethods, IntoFunction, Object, PropertyDescriptor, PropertyKey, Value,
+        },
+    },
+    engine::context::{Bindable, GcScope},
+};
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::{
@@ -21,6 +42,27 @@ use crate::{
     widgets::{command_bar::CommandBar, status_bar::StatusBar, workspace::Workspace},
 };
 
+pub enum Mode {
+    Normal,
+    /// Colon and input command.
+    Command(String),
+}
+
+impl Mode {
+    fn as_command(&self) -> Option<&str> {
+        match self {
+            Mode::Normal => None,
+            Mode::Command(command) => Some(command),
+        }
+    }
+}
+
+/// App runtime setting.
+struct Setting {
+    /// Current color.
+    color: Color,
+}
+
 pub struct App {
     /// Whether the app should exit.
     should_exit: bool,
@@ -28,22 +70,123 @@ pub struct App {
     /// The data of actual drawing.
     drawing: Drawing,
 
-    color: Color,
+    /// Current mode.
+    mode: Mode,
 
     // Retained areas.
     window_size: Option<WindowSize>,
     canvas_area: Option<Rect>,
+
+    setting: Arc<RefCell<Setting>>,
+
+    agent: GcAgent,
+    realm: RealmRoot,
+}
+
+struct SettingResource {
+    setting: Arc<RefCell<Setting>>,
+}
+
+fn set_color<'gc>(
+    agent: &mut Agent,
+    _this: Value,
+    args: ArgumentsList,
+    mut gc: GcScope<'gc, '_>,
+) -> JsResult<'gc, Value<'gc>> {
+    let color = args.get(0).to_int32(agent, gc.reborrow()).unbind()? as u32;
+
+    let host_data = agent
+        .get_host_data()
+        .downcast_ref::<HostData<RuntimeMacroTask>>()
+        .unwrap();
+    let mut storage = host_data.storage.borrow_mut();
+    let res = storage.get_mut::<SettingResource>().unwrap();
+
+    match color {
+        // aliceblue
+        0 => res.setting.borrow_mut().color = Color([240, 248, 255, 255]),
+        1 => res.setting.borrow_mut().color = Color([0, 255, 255, 255]),
+        2 => res.setting.borrow_mut().color = Color([240, 255, 255, 255]),
+        3 => res.setting.borrow_mut().color = Color([210, 105, 30, 255]),
+        4 => res.setting.borrow_mut().color = Color([0, 0, 139, 255]),
+        5 => res.setting.borrow_mut().color = Color([0, 100, 0, 255]),
+        _ => {}
+    }
+
+    Ok(Value::Undefined)
+}
+
+fn prepare_js(setting: Arc<RefCell<Setting>>) -> (GcAgent, RealmRoot) {
+    let (_macro_task_tx, _macro_task_rx) = mpsc::channel();
+    let host_data = HostData::new(_macro_task_tx);
+
+    {
+        let mut map = host_data.storage.borrow_mut();
+        map.insert(SettingResource { setting });
+    }
+
+    let host_hooks = RuntimeHostHooks::new(host_data);
+    let host_hooks: &RuntimeHostHooks<RuntimeMacroTask> = &*Box::leak(Box::new(host_hooks));
+
+    let mut agent = GcAgent::new(
+        Options {
+            disable_gc: false,
+            print_internals: false,
+        },
+        host_hooks,
+    );
+
+    let create_global_object: Option<for<'a> fn(&mut Agent, GcScope<'a, '_>) -> Object<'a>> = None;
+    let create_global_this_value: Option<for<'a> fn(&mut Agent, GcScope<'a, '_>) -> Object<'a>> =
+        None;
+    let realm = agent.create_realm(
+        create_global_object,
+        create_global_this_value,
+        Some(
+            |agent: &mut Agent, global_object: Object<'_>, mut gc: GcScope<'_, '_>| {
+                // builtin
+                let function = create_builtin_function(
+                    agent,
+                    nova_vm::ecmascript::builtins::Behaviour::Regular(set_color),
+                    BuiltinFunctionArgs::new(1, "_set_color"),
+                    gc.nogc(),
+                );
+
+                let property_key = PropertyKey::from_static_str(agent, "color", gc.nogc());
+                global_object
+                    .internal_define_own_property(
+                        agent,
+                        property_key.unbind(),
+                        PropertyDescriptor {
+                            set: Some(Some(function.into_function().unbind())),
+                            ..Default::default()
+                        },
+                        gc.reborrow(),
+                    )
+                    .unwrap();
+            },
+        ),
+    );
+
+    (agent, realm)
 }
 
 impl Default for App {
     fn default() -> Self {
+        let setting = Arc::new(RefCell::new(Setting {
+            color: Color::BLACK,
+        }));
+        let (agent, realm) = prepare_js(setting.clone());
         Self {
+            mode: Mode::Normal,
             should_exit: false,
             path: None,
-            color: Color::RED,
             drawing: Default::default(),
             window_size: window_size().ok(),
             canvas_area: Default::default(),
+            setting,
+            agent,
+            realm,
         }
     }
 }
@@ -55,13 +198,21 @@ impl App {
 
         dbg!(drawing.validate());
 
+        let setting = Arc::new(RefCell::new(Setting {
+            color: Color::BLACK,
+        }));
+        let (agent, realm) = prepare_js(setting.clone());
+
         Ok(Self {
             should_exit: false,
+            mode: Mode::Normal,
             path: Some(path),
-            color: Color::RED,
             drawing,
             window_size: window_size().ok(),
             canvas_area: None,
+            setting,
+            agent,
+            realm,
         })
     }
 
@@ -100,7 +251,7 @@ impl App {
             &mut self.canvas_area,
         );
         frame.render_widget(StatusBar, layout[1]);
-        frame.render_widget(CommandBar, layout[2]);
+        frame.render_widget(CommandBar::new(self.mode.as_command()), layout[2]);
     }
 
     fn handle_event(&mut self) -> Result<()> {
@@ -119,28 +270,88 @@ impl App {
 
     /// Handle key event.
     fn on_key(&mut self, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Char('q') => {
-                self.should_exit = true;
+        match &mut self.mode {
+            Mode::Normal => {
+                match key.code {
+                    KeyCode::Char('q') => {
+                        self.should_exit = true;
+                    }
+                    KeyCode::Char('w') => {
+                        self.write()?;
+                    }
+                    KeyCode::Char('1') => {
+                        self.setting.borrow_mut().color = Color::RED;
+                    }
+                    KeyCode::Char('2') => {
+                        self.setting.borrow_mut().color = Color::GREEN;
+                    }
+                    KeyCode::Char('3') => {
+                        self.setting.borrow_mut().color = Color::BLUE;
+                    }
+                    KeyCode::Char('4') => {
+                        self.setting.borrow_mut().color = Color::BLACK;
+                    }
+                    KeyCode::Char(':') => {
+                        // enter command mode
+                        self.mode = Mode::Command(String::new());
+                    }
+                    _ => {}
+                }
             }
-            KeyCode::Char('w') => {
-                self.write()?;
-            }
-            KeyCode::Char('1') => {
-                self.color = Color::RED;
-            }
-            KeyCode::Char('2') => {
-                self.color = Color::GREEN;
-            }
-            KeyCode::Char('3') => {
-                self.color = Color::BLUE;
-            }
-            KeyCode::Char('4') => {
-                self.color = Color::BLACK;
-            }
-            _ => {}
+            Mode::Command(command) => match key.code {
+                KeyCode::Backspace => {
+                    command.pop();
+                }
+                KeyCode::Enter => {
+                    self.execute_command();
+                }
+                KeyCode::Char(ch) => {
+                    command.push(ch);
+                }
+                KeyCode::Esc => {
+                    self.mode = Mode::Normal;
+                }
+                _ => {}
+            },
         }
         Ok(())
+    }
+
+    fn execute_command(&mut self) {
+        let mode = std::mem::replace(&mut self.mode, Mode::Normal);
+        let Mode::Command(command) = mode else {
+            panic!("not command mode")
+        };
+
+        self.agent.run_in_realm(&self.realm, |agent, mut gc| {
+            let realm_obj = agent.current_realm(gc.nogc());
+            let source_text = types::String::from_str(agent, &command, gc.nogc());
+            let script = match parse_script(agent, source_text, realm_obj, true, None, gc.nogc()) {
+                Ok(script) => script,
+                _ => panic!("invalid script"),
+            };
+
+            let result = script_evaluation(agent, script.unbind(), gc.reborrow()).unbind();
+            match result {
+                Ok(result) => match result.to_string(agent, gc) {
+                    Ok(val) => {
+                        // println!("{}", val.to_string_lossy(agent));
+                    }
+                    Err(_) => {
+                        // eprintln!("error converting result to string")
+                    }
+                },
+                Err(error) => {
+                    let error_value = error.value();
+                    let error_message = error_value
+                        .string_repr(agent, gc.reborrow())
+                        .as_str(agent)
+                        .unwrap()
+                        .to_string();
+                    // eprintln!("{}", error_message);
+                }
+            }
+        });
     }
 
     fn write(&self) -> Result<()> {
@@ -158,7 +369,7 @@ impl App {
                     MouseEventKind::Down(mouse_button) | MouseEventKind::Drag(mouse_button) => {
                         match mouse_button {
                             MouseButton::Left => {
-                                *pixel = self.color;
+                                *pixel = self.setting.borrow().color;
                             }
                             MouseButton::Right => {
                                 *pixel = Color::RESET;
