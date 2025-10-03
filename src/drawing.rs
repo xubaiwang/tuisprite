@@ -22,7 +22,21 @@ impl ColorExt for Color {
     }
 
     fn grayscale(&self) -> u8 {
-        (0.299 * self.r + 0.587 * self.g + 0.114 * self.b) as u8
+        ((0.299 * self.r + 0.587 * self.g + 0.114 * self.b) * 255.) as u8
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use csscolorparser::Color;
+
+    use crate::drawing::ColorExt;
+
+    #[test]
+    fn test_grayscale() {
+        let white = Color::new(1., 1., 1., 1.);
+        let grayscale = white.grayscale();
+        assert_eq!(grayscale, 255);
     }
 }
 

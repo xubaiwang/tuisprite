@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     fs, io,
     path::{Path, PathBuf},
     sync::{Arc, mpsc},
@@ -63,6 +64,8 @@ impl Mode {
 pub struct Setting {
     /// Current color.
     pub color: Color,
+
+    pub color_history: VecDeque<Color>,
 }
 
 pub struct App {
@@ -105,6 +108,13 @@ fn set_color<'gc>(
     let res = storage.get_mut::<SettingResource>().unwrap();
 
     if let Ok(color) = csscolorparser::Color::from_html(color.to_string_lossy(agent)) {
+        let old_color = res.setting.borrow().color.clone();
+        if !res.setting.borrow().color_history.contains(&old_color) {
+            res.setting.borrow_mut().color_history.push_back(old_color);
+        }
+        if res.setting.borrow().color_history.len() > 10 {
+            res.setting.borrow_mut().color_history.pop_front();
+        }
         res.setting.borrow_mut().color = color;
     };
 
@@ -170,6 +180,7 @@ impl Default for App {
     fn default() -> Self {
         let setting = Arc::new(RefCell::new(Setting {
             color: Color::from_rgba8(0, 0, 0, 255),
+            color_history: VecDeque::new(),
         }));
         let (agent, realm) = prepare_js(setting.clone());
         Self {
@@ -197,8 +208,17 @@ impl App {
     pub fn new(path: PathBuf) -> Result<Self> {
         let drawing = load_drawing_from_file(&path).unwrap_or_default();
 
+        let mut color_history = VecDeque::new();
+        color_history.push_back(Color::from_rgba8(255, 0, 0, 255));
+        color_history.push_back(Color::from_rgba8(0, 255, 0, 255));
+        color_history.push_back(Color::from_rgba8(0, 0, 255, 255));
+        color_history.push_back(Color::from_rgba8(0, 255, 255, 255));
+        color_history.push_back(Color::from_rgba8(255, 255, 0, 255));
+        color_history.push_back(Color::from_rgba8(255, 255, 255, 255));
+
         let setting = Arc::new(RefCell::new(Setting {
             color: Color::from_rgba8(0, 0, 0, 255),
+            color_history,
         }));
         let (agent, realm) = prepare_js(setting.clone());
 
@@ -301,6 +321,66 @@ impl App {
                     }
                     KeyCode::Char('E') => {
                         self.drawing.erase_all();
+                    }
+                    KeyCode::Char('1') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(0) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('2') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(1) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('3') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(2) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('4') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(3) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('5') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(4) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('6') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(5) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('7') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(6) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('8') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(7) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('9') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(8) {
+                            setting.color = color.clone();
+                        }
+                    }
+                    KeyCode::Char('0') => {
+                        let mut setting = self.setting.borrow_mut();
+                        if let Some(color) = setting.color_history.iter().nth_back(9) {
+                            setting.color = color.clone();
+                        }
                     }
                     _ => {}
                 }

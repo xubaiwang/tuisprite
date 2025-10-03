@@ -34,7 +34,7 @@ impl<'a> Widget for StatusBar<'a> {
         }
         .to_ratatui();
 
-        Line::from(vec![
+        let mut spans = vec![
             Span::raw(" "),
             Span::raw("NORMAL").bold(),
             Span::raw(" "),
@@ -43,8 +43,22 @@ impl<'a> Widget for StatusBar<'a> {
                 Style::default().bg(bg).fg(fg),
             )
             .bold(),
-        ])
-        .black()
-        .render(area, buf);
+        ];
+
+        for (idx, color) in self.setting.color_history.iter().rev().enumerate() {
+            let grayscale = color.grayscale();
+            let fg = if grayscale > 128 {
+                Color::from_rgba8(0, 0, 0, 255)
+            } else {
+                Color::from_rgba8(255, 255, 255, 255)
+            }
+            .to_ratatui();
+            spans.push(Span::styled(
+                format!("{}", idx + 1),
+                Style::default().bg(color.to_ratatui()).fg(fg),
+            ));
+        }
+
+        Line::from(spans).black().render(area, buf);
     }
 }
