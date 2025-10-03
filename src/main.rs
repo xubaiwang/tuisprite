@@ -4,10 +4,9 @@ use clap::Parser;
 use crate::{app::App, cli::Args};
 
 mod app;
-// mod canvas;
 mod cli;
 mod drawing;
-mod sgr_pixel;
+mod utils;
 mod widgets;
 
 fn main() -> Result<()> {

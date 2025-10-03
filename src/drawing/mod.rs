@@ -3,42 +3,8 @@
 use csscolorparser::Color;
 use serde::{Deserialize, Serialize};
 
-pub trait ColorExt {
-    fn to_ratatui(&self) -> ratatui::style::Color;
-    fn grayscale(&self) -> u8;
-}
-
-impl ColorExt for Color {
-    fn to_ratatui(&self) -> ratatui::style::Color {
-        let [r, g, b, a] = self.to_rgba8();
-        let [bg_r, bg_g, bg_b] = [255, 255, 255];
-
-        let blend = |x, bg_x| {
-            let a = a as f32 / 255.;
-            (a * x as f32 + (1. - a) * bg_x as f32) as u8
-        };
-
-        ratatui::style::Color::Rgb(blend(r, bg_r), blend(g, bg_g), blend(b, bg_b))
-    }
-
-    fn grayscale(&self) -> u8 {
-        ((0.299 * self.r + 0.587 * self.g + 0.114 * self.b) * 255.) as u8
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use csscolorparser::Color;
-
-    use crate::drawing::ColorExt;
-
-    #[test]
-    fn test_grayscale() {
-        let white = Color::new(1., 1., 1., 1.);
-        let grayscale = white.grayscale();
-        assert_eq!(grayscale, 255);
-    }
-}
+pub mod color;
+pub mod io;
 
 #[derive(Serialize, Deserialize)]
 pub struct Drawing {
@@ -48,8 +14,19 @@ pub struct Drawing {
     pub pixels: Vec<Color>,
 }
 
+/// Creation.
 impl Drawing {
+    /// Create new empty drawing with given size.
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            pixels: vec![Color::from_rgba8(0, 0, 0, 0); width * height],
+        }
+    }
+
     pub fn validate(&mut self) -> bool {
+        // XXX: should not modify
         if self.pixels.len() == 0 {
             self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
         }
@@ -57,6 +34,15 @@ impl Drawing {
     }
 }
 
+impl Default for Drawing {
+    fn default() -> Self {
+        const DEFAULT_SIZE: usize = 16;
+
+        Self::new(DEFAULT_SIZE, DEFAULT_SIZE)
+    }
+}
+
+/// Basic ops.
 impl Drawing {
     pub fn pixel(&self, x: usize, y: usize) -> Option<&Color> {
         if x >= self.width || y >= self.height {
@@ -99,19 +85,5 @@ impl Drawing {
 
     pub fn erase_all(&mut self) {
         self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
-    }
-}
-
-const DEFAULT_SIZE: usize = 8;
-
-impl Default for Drawing {
-    fn default() -> Self {
-        let pixels = vec![Color::from_rgba8(0, 0, 0, 0); DEFAULT_SIZE * DEFAULT_SIZE];
-
-        Self {
-            width: DEFAULT_SIZE,
-            height: DEFAULT_SIZE,
-            pixels,
-        }
     }
 }

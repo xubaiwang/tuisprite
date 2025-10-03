@@ -1,19 +1,18 @@
-use csscolorparser::Color;
 use ratatui::{
     style::{Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Widget},
 };
 
-use crate::{app::Setting, drawing::ColorExt};
+use crate::{app::config::Config, drawing::color::ColorExt};
 
 pub struct StatusBar<'a> {
-    setting: &'a Setting,
+    config: &'a Config,
 }
 
 impl<'a> StatusBar<'a> {
-    pub fn new(setting: &'a Setting) -> Self {
-        Self { setting }
+    pub fn new(setting: &'a Config) -> Self {
+        Self { config: setting }
     }
 }
 
@@ -22,43 +21,47 @@ impl<'a> Widget for StatusBar<'a> {
     where
         Self: Sized,
     {
-        // reversed background color
+        // bar background color
         Block::new().on_gray().render(area, buf);
 
-        let bg = self.setting.color.to_ratatui();
-        let grayscale = self.setting.color.grayscale();
-        let fg = if grayscale > 128 {
-            Color::from_rgba8(0, 0, 0, 255)
-        } else {
-            Color::from_rgba8(255, 255, 255, 255)
-        }
-        .to_ratatui();
+        let bg = self.config.color.borrow().to_ratatui();
+        let fg = self.config.color.borrow().calculate_fg().to_ratatui();
 
         let mut spans = vec![
             Span::raw(" "),
             Span::raw("NORMAL").bold(),
             Span::raw(" "),
             Span::styled(
-                format!(" {} ", self.setting.color.to_css_hex()),
+                format!(" {} ", self.config.color.borrow().to_css_hex()),
                 Style::default().bg(bg).fg(fg),
             )
             .bold(),
         ];
 
-        for (idx, color) in self.setting.color_history.iter().rev().enumerate() {
-            let grayscale = color.grayscale();
-            let fg = if grayscale > 128 {
-                Color::from_rgba8(0, 0, 0, 255)
-            } else {
-                Color::from_rgba8(255, 255, 255, 255)
-            }
-            .to_ratatui();
+        for (idx, color) in self.config.color_history.borrow().iter().rev().enumerate() {
+            let fg = color.calculate_fg().to_ratatui();
             spans.push(Span::styled(
-                format!("{}", idx + 1),
-                Style::default().bg(color.to_ratatui()).fg(fg),
+                format!("{}", to_superscript(idx + 1)),
+                Style::default().bg(color.to_ratatui()).fg(fg).bold(),
             ));
         }
 
         Line::from(spans).black().render(area, buf);
+    }
+}
+
+fn to_superscript(idx: usize) -> char {
+    match idx {
+        1 => '¹',
+        2 => '²',
+        3 => '³',
+        4 => '⁴',
+        5 => '⁵',
+        6 => '⁶',
+        7 => '⁷',
+        8 => '⁸',
+        9 => '⁹',
+        10 => '⁰',
+        _ => panic!("out of superscript"),
     }
 }

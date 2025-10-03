@@ -1,6 +1,6 @@
 use ratatui::{layout::Rect, style::Style, widgets::StatefulWidget};
 
-use crate::drawing::{ColorExt, Drawing};
+use crate::drawing::{Drawing, color::ColorExt};
 
 const UPPER_HALF_BLOCK: &str = "▀";
 const LOWER_HALF_BLOCK: &str = "▄";
@@ -29,11 +29,9 @@ impl<'a> StatefulWidget for Canvas<'a> {
         // pass state back
         *state = Some(area);
 
-        // the border
-
         // NOTE: how to render?
-        // iterate over each two row of the drawing and set pixel
-        // four cases:
+        // Iterate over each two row of the drawing and set pixel.
+        // Four cases:
         // 1. both have color => upper block
         // 2. only upper has color => upper block
         // 3. only lower has color => lower block
@@ -42,6 +40,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
             for c in 0..self.drawing.width {
                 let upper = self.drawing.pixel(c, 2 * r);
                 let lower = self.drawing.pixel(c, 2 * r + 1);
+
                 match (upper, lower) {
                     (None, None) => {}
                     (None, Some(lower)) => {
