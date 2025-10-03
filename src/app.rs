@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     fs, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, mpsc},
 };
 
@@ -186,12 +186,16 @@ impl Default for App {
     }
 }
 
+fn load_drawing_from_file(path: &Path) -> Result<Drawing> {
+    let text = fs::read_to_string(path)?;
+    let mut drawing = serde_json::from_str::<Drawing>(&text)?;
+    drawing.validate();
+    Ok(drawing)
+}
+
 impl App {
     pub fn new(path: PathBuf) -> Result<Self> {
-        let text = fs::read_to_string(&path)?;
-        let mut drawing = serde_json::from_str::<Drawing>(&text)?;
-
-        dbg!(drawing.validate());
+        let drawing = load_drawing_from_file(&path).unwrap_or_default();
 
         let setting = Arc::new(RefCell::new(Setting {
             color: Color::from_rgba8(0, 0, 0, 255),
