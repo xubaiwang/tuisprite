@@ -9,4 +9,8 @@ Create sprites images in your terminal.
 
 ## Usage
 
-- `:color = "red"` to change color, css color is allowed
+- `w` to save
+- `q` to quit
+- `-/+` to resize
+- `:` to eval JS/TS code
+  - `:color = "red"` to change color, css color
