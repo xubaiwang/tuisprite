@@ -604,6 +604,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "csscolorparser"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fda6aace1fbef3aa217b27f4c8d7d071ef2a70a5ca51050b1f17d40299d3f16"
+dependencies = [
+ "phf 0.11.3",
+ "serde",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3383,10 +3393,12 @@ dependencies = [
  "andromeda-runtime",
  "anyhow",
  "clap",
+ "csscolorparser 0.7.2",
  "nova_vm",
  "ratatui",
  "serde",
  "serde_json",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3740,7 +3752,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7de81ef35c9010270d63772bebef2f2d6d1f2d20a983d27505ac850b8c4b4296"
 dependencies = [
- "csscolorparser",
+ "csscolorparser 0.6.2",
  "deltae",
  "lazy_static",
  "serde",

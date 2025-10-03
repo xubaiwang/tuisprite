@@ -1,14 +1,12 @@
 use ratatui::widgets::Widget;
 
 pub struct CommandBar<'a> {
-    command: &'a str,
+    command: Option<&'a str>,
 }
 
 impl<'a> CommandBar<'a> {
     pub fn new(command: Option<&'a str>) -> Self {
-        Self {
-            command: command.unwrap_or(""),
-        }
+        Self { command }
     }
 }
 
@@ -17,6 +15,8 @@ impl<'a> Widget for CommandBar<'a> {
     where
         Self: Sized,
     {
-        format!(":{}", self.command).render(area, buf);
+        if let Some(command) = self.command {
+            format!(":{}", command).render(area, buf);
+        }
     }
 }

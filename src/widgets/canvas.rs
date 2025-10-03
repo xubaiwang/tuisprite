@@ -4,7 +4,7 @@ use ratatui::{
     widgets::{Block, StatefulWidget, Widget},
 };
 
-use crate::drawing::Drawing;
+use crate::drawing::{ColorExt, Drawing};
 
 const UPPER_HALF_BLOCK: &str = "▀";
 const LOWER_HALF_BLOCK: &str = "▄";
@@ -34,8 +34,6 @@ impl<'a> StatefulWidget for Canvas<'a> {
         *state = Some(area);
 
         // the border
-        // TODO: unique bg color is better than border
-        Block::bordered().render(area.outer(Margin::new(1, 1)), buf);
 
         // NOTE: how to render?
         // iterate over each two row of the drawing and set pixel
@@ -55,7 +53,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.x + c as u16,
                             area.y + r as u16,
                             LOWER_HALF_BLOCK,
-                            Style::default().fg(lower.to_ratatui(self.drawing.background)),
+                            Style::default().fg(lower.to_ratatui()),
                         );
                     }
                     (Some(upper), None) => {
@@ -63,7 +61,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.x + c as u16,
                             area.y + r as u16,
                             UPPER_HALF_BLOCK,
-                            Style::default().fg(upper.to_ratatui(self.drawing.background)),
+                            Style::default().fg(upper.to_ratatui()),
                         );
                     }
                     (Some(upper), Some(lower)) => {
@@ -72,8 +70,8 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.y + r as u16,
                             UPPER_HALF_BLOCK,
                             Style::default()
-                                .fg(upper.to_ratatui(self.drawing.background))
-                                .bg(lower.to_ratatui(self.drawing.background)),
+                                .fg(upper.to_ratatui())
+                                .bg(lower.to_ratatui()),
                         );
                     }
                 }

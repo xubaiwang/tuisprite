@@ -8,12 +8,13 @@ use std::{
 use andromeda_core::{HostData, RuntimeHostHooks};
 use andromeda_runtime::RuntimeMacroTask;
 use anyhow::Result;
+use csscolorparser::Color;
 use nova_vm::{
     ecmascript::{
         builtins::{ArgumentsList, BuiltinFunctionArgs, create_builtin_function},
         execution::{
             Agent, JsResult,
-            agent::{self, GcAgent, Options, RealmRoot},
+            agent::{GcAgent, Options, RealmRoot},
         },
         scripts_and_modules::script::{parse_script, script_evaluation},
         types::{
@@ -35,9 +36,10 @@ use ratatui::{
     },
     layout::{Constraint, Layout, Rect},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    drawing::{Color, Drawing},
+    drawing::Drawing,
     sgr_pixel::EnableSgrPixel,
     widgets::{command_bar::CommandBar, status_bar::StatusBar, workspace::Workspace},
 };
@@ -58,9 +60,9 @@ impl Mode {
 }
 
 /// App runtime setting.
-struct Setting {
+pub struct Setting {
     /// Current color.
-    color: Color,
+    pub color: Color,
 }
 
 pub struct App {
@@ -93,7 +95,7 @@ fn set_color<'gc>(
     args: ArgumentsList,
     mut gc: GcScope<'gc, '_>,
 ) -> JsResult<'gc, Value<'gc>> {
-    let color = args.get(0).to_int32(agent, gc.reborrow()).unbind()? as u32;
+    let color = args.get(0).to_string(agent, gc.reborrow()).unbind()?;
 
     let host_data = agent
         .get_host_data()
@@ -102,16 +104,9 @@ fn set_color<'gc>(
     let mut storage = host_data.storage.borrow_mut();
     let res = storage.get_mut::<SettingResource>().unwrap();
 
-    match color {
-        // aliceblue
-        0 => res.setting.borrow_mut().color = Color([240, 248, 255, 255]),
-        1 => res.setting.borrow_mut().color = Color([0, 255, 255, 255]),
-        2 => res.setting.borrow_mut().color = Color([240, 255, 255, 255]),
-        3 => res.setting.borrow_mut().color = Color([210, 105, 30, 255]),
-        4 => res.setting.borrow_mut().color = Color([0, 0, 139, 255]),
-        5 => res.setting.borrow_mut().color = Color([0, 100, 0, 255]),
-        _ => {}
-    }
+    if let Ok(color) = csscolorparser::Color::from_html(color.to_string_lossy(agent)) {
+        res.setting.borrow_mut().color = color;
+    };
 
     Ok(Value::Undefined)
 }
@@ -174,7 +169,7 @@ fn prepare_js(setting: Arc<RefCell<Setting>>) -> (GcAgent, RealmRoot) {
 impl Default for App {
     fn default() -> Self {
         let setting = Arc::new(RefCell::new(Setting {
-            color: Color::BLACK,
+            color: Color::from_rgba8(0, 0, 0, 255),
         }));
         let (agent, realm) = prepare_js(setting.clone());
         Self {
@@ -199,7 +194,7 @@ impl App {
         dbg!(drawing.validate());
 
         let setting = Arc::new(RefCell::new(Setting {
-            color: Color::BLACK,
+            color: Color::from_rgba8(0, 0, 0, 255),
         }));
         let (agent, realm) = prepare_js(setting.clone());
 
@@ -250,8 +245,15 @@ impl App {
             layout[0],
             &mut self.canvas_area,
         );
-        frame.render_widget(StatusBar, layout[1]);
+        frame.render_widget(StatusBar::new(&self.setting.borrow()), layout[1]);
         frame.render_widget(CommandBar::new(self.mode.as_command()), layout[2]);
+
+        match &self.mode {
+            Mode::Command(command) => {
+                frame.set_cursor_position((1 + command.width() as u16, frame.area().bottom() - 1));
+            }
+            _ => {}
+        }
     }
 
     fn handle_event(&mut self) -> Result<()> {
@@ -279,18 +281,7 @@ impl App {
                     KeyCode::Char('w') => {
                         self.write()?;
                     }
-                    KeyCode::Char('1') => {
-                        self.setting.borrow_mut().color = Color::RED;
-                    }
-                    KeyCode::Char('2') => {
-                        self.setting.borrow_mut().color = Color::GREEN;
-                    }
-                    KeyCode::Char('3') => {
-                        self.setting.borrow_mut().color = Color::BLUE;
-                    }
-                    KeyCode::Char('4') => {
-                        self.setting.borrow_mut().color = Color::BLACK;
-                    }
+
                     KeyCode::Char(':') => {
                         // enter command mode
                         self.mode = Mode::Command(String::new());
@@ -369,10 +360,10 @@ impl App {
                     MouseEventKind::Down(mouse_button) | MouseEventKind::Drag(mouse_button) => {
                         match mouse_button {
                             MouseButton::Left => {
-                                *pixel = self.setting.borrow().color;
+                                *pixel = self.setting.borrow().color.clone();
                             }
                             MouseButton::Right => {
-                                *pixel = Color::RESET;
+                                *pixel = Color::from_rgba8(0, 0, 0, 0);
                             }
                             _ => {}
                         }
