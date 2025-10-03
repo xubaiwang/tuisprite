@@ -1,17 +1,21 @@
 use ratatui::{layout::Rect, style::Style, widgets::StatefulWidget};
 
-use crate::drawing::{Drawing, color::ColorExt};
+use crate::{
+    app::config::Config,
+    drawing::{Drawing, color::ColorExt},
+};
 
 const UPPER_HALF_BLOCK: &str = "▀";
 const LOWER_HALF_BLOCK: &str = "▄";
 
 pub struct Canvas<'a> {
+    config: &'a Config,
     drawing: &'a Drawing,
 }
 
 impl<'a> Canvas<'a> {
-    pub fn new(drawing: &'a Drawing) -> Self {
-        Self { drawing }
+    pub fn new(config: &'a Config, drawing: &'a Drawing) -> Self {
+        Self { config, drawing }
     }
 }
 
@@ -38,6 +42,16 @@ impl<'a> StatefulWidget for Canvas<'a> {
         // 4. none have color => empty
         for r in 0..self.drawing.height.div_ceil(2) {
             for c in 0..self.drawing.width {
+                let bg = {
+                    let col = c / self.config.transparency_grid.size;
+                    let row = 2 * r / self.config.transparency_grid.size;
+                    if (col + row) % 2 == 0 {
+                        self.config.transparency_grid.dark
+                    } else {
+                        self.config.transparency_grid.light
+                    }
+                };
+
                 let upper = self.drawing.pixel(c, 2 * r);
                 let lower = self.drawing.pixel(c, 2 * r + 1);
 
@@ -48,7 +62,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.x + c as u16,
                             area.y + r as u16,
                             LOWER_HALF_BLOCK,
-                            Style::default().fg(lower.to_ratatui()),
+                            Style::default().fg(lower.to_ratatui(bg)),
                         );
                     }
                     (Some(upper), None) => {
@@ -56,7 +70,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.x + c as u16,
                             area.y + r as u16,
                             UPPER_HALF_BLOCK,
-                            Style::default().fg(upper.to_ratatui()),
+                            Style::default().fg(upper.to_ratatui(bg)),
                         );
                     }
                     (Some(upper), Some(lower)) => {
@@ -65,8 +79,8 @@ impl<'a> StatefulWidget for Canvas<'a> {
                             area.y + r as u16,
                             UPPER_HALF_BLOCK,
                             Style::default()
-                                .fg(upper.to_ratatui())
-                                .bg(lower.to_ratatui()),
+                                .fg(upper.to_ratatui(bg))
+                                .bg(lower.to_ratatui(bg)),
                         );
                     }
                 }

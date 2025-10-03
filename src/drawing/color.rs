@@ -3,16 +3,16 @@
 use csscolorparser::Color;
 
 pub trait ColorExt {
-    fn to_ratatui(&self) -> ratatui::style::Color;
+    fn to_ratatui(&self, bg: [u8; 3]) -> ratatui::style::Color;
     fn grayscale(&self) -> u8;
     /// Which fg (black or white) to use when use self as background.
     fn calculate_fg(&self) -> Color;
 }
 
 impl ColorExt for Color {
-    fn to_ratatui(&self) -> ratatui::style::Color {
+    fn to_ratatui(&self, bg: [u8; 3]) -> ratatui::style::Color {
         let [r, g, b, a] = self.to_rgba8();
-        let [bg_r, bg_g, bg_b] = [255, 255, 255];
+        let [bg_r, bg_g, bg_b] = bg;
 
         let blend = |x, bg_x| {
             let a = a as f32 / 255.;

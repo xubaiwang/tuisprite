@@ -4,7 +4,10 @@ use ratatui::{
     widgets::{Block, Widget},
 };
 
-use crate::{app::config::Config, drawing::color::ColorExt};
+use crate::{
+    app::config::{Config, mode::Mode},
+    drawing::color::ColorExt,
+};
 
 pub struct StatusBar<'a> {
     config: &'a Config,
@@ -24,12 +27,21 @@ impl<'a> Widget for StatusBar<'a> {
         // bar background color
         Block::new().on_gray().render(area, buf);
 
-        let bg = self.config.color.borrow().to_ratatui();
-        let fg = self.config.color.borrow().calculate_fg().to_ratatui();
+        let bg = self.config.color.borrow().to_ratatui([0, 0, 0]);
+        let fg = self
+            .config
+            .color
+            .borrow()
+            .calculate_fg()
+            .to_ratatui([0, 0, 0]);
 
         let mut spans = vec![
             Span::raw(" "),
-            Span::raw("NORMAL").bold(),
+            Span::raw(match &*self.config.mode.borrow() {
+                Mode::Normal => "NORMAL",
+                Mode::Command(_) => "COMMAND",
+            })
+            .bold(),
             Span::raw(" "),
             Span::styled(
                 format!(" {} ", self.config.color.borrow().to_css_hex()),
@@ -39,10 +51,13 @@ impl<'a> Widget for StatusBar<'a> {
         ];
 
         for (idx, color) in self.config.color_history.borrow().iter().rev().enumerate() {
-            let fg = color.calculate_fg().to_ratatui();
+            let fg = color.calculate_fg().to_ratatui([0, 0, 0]);
             spans.push(Span::styled(
                 format!("{}", to_superscript(idx + 1)),
-                Style::default().bg(color.to_ratatui()).fg(fg).bold(),
+                Style::default()
+                    .bg(color.to_ratatui([0, 0, 0]))
+                    .fg(fg)
+                    .bold(),
             ));
         }
 

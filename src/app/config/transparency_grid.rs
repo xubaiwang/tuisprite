@@ -1,13 +1,11 @@
-use csscolorparser::Color;
-
 /// How to display transparency background.
 pub struct TransparencyGrid {
     /// Width/Height of each grid cell.
-    pub size: u16,
+    pub size: usize,
     /// Color of darker grid cell.
-    pub dark: Color,
+    pub dark: [u8; 3],
     /// Color of lighter grid cell.
-    pub light: Color,
+    pub light: [u8; 3],
 }
 
 // NOTE: the aseprite looking
@@ -15,8 +13,8 @@ impl Default for TransparencyGrid {
     fn default() -> Self {
         Self {
             size: 8,
-            dark: Color::from_rgba8(217, 217, 217, 255),
-            light: Color::from_rgba8(240, 240, 240, 255),
+            dark: [217, 217, 217],
+            light: [240, 240, 240],
         }
     }
 }

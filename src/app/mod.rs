@@ -105,7 +105,7 @@ impl App {
         .split(frame.area());
 
         frame.render_stateful_widget(
-            Workspace::new(&self.drawing),
+            Workspace::new(&self.config.borrow(), &self.drawing),
             layout[0],
             &mut self.canvas_area,
         );
