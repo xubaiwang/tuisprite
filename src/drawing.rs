@@ -60,18 +60,27 @@ impl Drawing {
         self.pixels.get_mut(index)
     }
 
-    pub fn increase(&mut self) {
-        self.width += 1;
-        self.height += 1;
-        self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
-    }
+    pub fn resize(&mut self, width: usize, height: usize) {
+        let old_width = self.width;
+        let old_height = self.height;
+        let mut new_pixels = Vec::with_capacity(width * height);
 
-    pub fn decrease(&mut self) {
-        if self.width > 1 {
-            self.width += 1;
-            self.height += 1;
-            self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
+        for y in 0..height {
+            for x in 0..width {
+                let color = if y < old_height && x < old_width {
+                    let old_index = y * old_width + x;
+                    self.pixels[old_index].clone()
+                } else {
+                    Color::from_rgba8(0, 0, 0, 0)
+                };
+                new_pixels.push(color);
+            }
         }
+
+        // update
+        self.width = width;
+        self.height = height;
+        self.pixels = new_pixels;
     }
 }
 

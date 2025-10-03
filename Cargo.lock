@@ -3394,6 +3394,7 @@ dependencies = [
  "anyhow",
  "clap",
  "csscolorparser 0.7.2",
+ "itertools 0.14.0",
  "nova_vm",
  "ratatui",
  "serde",

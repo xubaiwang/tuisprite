@@ -290,10 +290,14 @@ impl App {
                         self.mode = Mode::Command(String::new());
                     }
                     KeyCode::Char('+') => {
-                        self.drawing.increase();
+                        self.drawing
+                            .resize(self.drawing.width + 1, self.drawing.height + 1);
                     }
                     KeyCode::Char('-') => {
-                        self.drawing.decrease();
+                        if self.drawing.width > 1 {
+                            self.drawing
+                                .resize(self.drawing.width - 1, self.drawing.height - 1);
+                        }
                     }
                     _ => {}
                 }
