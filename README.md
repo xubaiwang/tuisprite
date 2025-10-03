@@ -11,6 +11,8 @@ Create sprites images in your terminal.
 
 - `w` to save
 - `q` to quit
-- `-/+` to resize
+- `-` decrease size
+- `+/=` increase size
+- `E` erase all
 - `:` to eval JS/TS code
   - `:color = "red"` to change color, css color

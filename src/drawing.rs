@@ -82,6 +82,10 @@ impl Drawing {
         self.height = height;
         self.pixels = new_pixels;
     }
+
+    pub fn erase_all(&mut self) {
+        self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
+    }
 }
 
 const DEFAULT_SIZE: usize = 8;

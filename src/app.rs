@@ -289,7 +289,7 @@ impl App {
                         // enter command mode
                         self.mode = Mode::Command(String::new());
                     }
-                    KeyCode::Char('+') => {
+                    KeyCode::Char('+') | KeyCode::Char('=') => {
                         self.drawing
                             .resize(self.drawing.width + 1, self.drawing.height + 1);
                     }
@@ -298,6 +298,9 @@ impl App {
                             self.drawing
                                 .resize(self.drawing.width - 1, self.drawing.height - 1);
                         }
+                    }
+                    KeyCode::Char('E') => {
+                        self.drawing.erase_all();
                     }
                     _ => {}
                 }
