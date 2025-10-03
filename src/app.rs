@@ -285,10 +285,15 @@ impl App {
                     KeyCode::Char('w') => {
                         self.write()?;
                     }
-
                     KeyCode::Char(':') => {
                         // enter command mode
                         self.mode = Mode::Command(String::new());
+                    }
+                    KeyCode::Char('+') => {
+                        self.drawing.increase();
+                    }
+                    KeyCode::Char('-') => {
+                        self.drawing.decrease();
                     }
                     _ => {}
                 }
@@ -329,7 +334,7 @@ impl App {
             let result = script_evaluation(agent, script.unbind(), gc.reborrow()).unbind();
             match result {
                 Ok(result) => match result.to_string(agent, gc) {
-                    Ok(val) => {
+                    Ok(_val) => {
                         // println!("{}", val.to_string_lossy(agent));
                     }
                     Err(_) => {
@@ -337,12 +342,12 @@ impl App {
                     }
                 },
                 Err(error) => {
-                    let error_value = error.value();
-                    let error_message = error_value
-                        .string_repr(agent, gc.reborrow())
-                        .as_str(agent)
-                        .unwrap()
-                        .to_string();
+                    let _error_value = error.value();
+                    // let error_message = error_value
+                    //     .string_repr(agent, gc.reborrow())
+                    //     .as_str(agent)
+                    //     .unwrap()
+                    //     .to_string();
                     // eprintln!("{}", error_message);
                 }
             }

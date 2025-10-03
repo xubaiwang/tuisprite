@@ -59,6 +59,20 @@ impl Drawing {
         let index = y * self.width + x;
         self.pixels.get_mut(index)
     }
+
+    pub fn increase(&mut self) {
+        self.width += 1;
+        self.height += 1;
+        self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
+    }
+
+    pub fn decrease(&mut self) {
+        if self.width > 1 {
+            self.width += 1;
+            self.height += 1;
+            self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
+        }
+    }
 }
 
 const DEFAULT_SIZE: usize = 8;

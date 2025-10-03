@@ -1,8 +1,4 @@
-use ratatui::{
-    layout::{Margin, Rect},
-    style::Style,
-    widgets::{Block, StatefulWidget, Widget},
-};
+use ratatui::{layout::Rect, style::Style, widgets::StatefulWidget};
 
 use crate::drawing::{ColorExt, Drawing};
 
