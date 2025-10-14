@@ -1,4 +1,9 @@
-use std::{cell::RefCell, fs, path::PathBuf, sync::Arc};
+use std::{
+    cell::RefCell,
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use csscolorparser::Color;
@@ -6,11 +11,12 @@ use ratatui::{
     DefaultTerminal, Frame,
     crossterm::{
         self,
-        event::{self, Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
+        event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
         terminal::{WindowSize, window_size},
     },
     layout::{Constraint, Layout, Rect},
 };
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub mod config;
 pub mod runtime;
@@ -24,6 +30,14 @@ use crate::{
     utils::mouse::{disable_mouse, enable_mouse},
     widgets::{command_bar::CommandBar, status_bar::StatusBar, workspace::Workspace},
 };
+
+#[derive(Debug)]
+enum Event {
+    /// Wrap crossterm event.
+    Terminal(crossterm::event::Event),
+    /// Report error message.
+    Message(String),
+}
 
 pub struct App {
     /// Whether the app should exit.
@@ -39,44 +53,40 @@ pub struct App {
     config: Arc<RefCell<Config>>,
 
     runtime: RefCell<Runtime>,
-}
 
-impl Default for App {
-    fn default() -> Self {
-        let config = Arc::new(RefCell::new(Config::default()));
-        let runtime = RefCell::new(Runtime::new(config.clone()));
+    tx: UnboundedSender<Event>,
+    rx: UnboundedReceiver<Event>,
 
-        Self {
-            should_exit: false,
-            path: None,
-            drawing: Default::default(),
-            window_size: window_size().ok(),
-            canvas_area: Default::default(),
-            config,
-            runtime,
-        }
-    }
+    message: Option<String>,
 }
 
 impl App {
-    pub fn new(path: PathBuf) -> Result<Self> {
-        let drawing = load_drawing_from_file(&path).unwrap_or_default();
+    pub fn new(path: Option<PathBuf>) -> Result<Self> {
+        let drawing = match &path {
+            Some(path) => load_drawing_from_file(path).unwrap_or_default(),
+            None => Drawing::default(),
+        };
         let config = Arc::new(RefCell::new(Config::default()));
         let runtime = RefCell::new(Runtime::new(config.clone()));
 
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
         Ok(Self {
             should_exit: false,
-            path: Some(path),
+            path,
             drawing,
             window_size: window_size().ok(),
             canvas_area: None,
             config,
             runtime,
+            tx,
+            rx,
+            message: None,
         })
     }
 
     /// Run the app loop.
-    pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+    pub async fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         // validate the drawing
         if !self.drawing.validate() {
             panic!("drawing is invliad");
@@ -84,9 +94,20 @@ impl App {
 
         enable_mouse()?;
 
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            loop {
+                if let Ok(event) = event::read()
+                    && tx.send(Event::Terminal(event)).is_err()
+                {
+                    break;
+                }
+            }
+        });
+
         while !self.should_exit {
             terminal.draw(|frame| self.render(frame))?;
-            self.handle_event()?;
+            self.handle_event().await?;
         }
 
         disable_mouse()?;
@@ -112,7 +133,7 @@ impl App {
         frame.render_widget(StatusBar::new(&self.config.borrow()), layout[1]);
         let mut position = None;
         frame.render_stateful_widget(
-            CommandBar::new(&self.config.borrow()),
+            CommandBar::new(&self.config.borrow(), self.message.as_deref()),
             layout[2],
             &mut position,
         );
@@ -123,15 +144,20 @@ impl App {
         }
     }
 
-    fn handle_event(&mut self) -> Result<()> {
-        let event = event::read().expect("failed to read event");
-
-        match event {
-            Event::Key(key) => self.on_key(key)?,
-            Event::Mouse(mouse) => self.on_mouse(mouse),
-            // NOTE: we need both cell size and pixel size, so the resize event fields is not used.
-            Event::Resize(_, _) => self.on_resize(),
-            _ => {}
+    async fn handle_event(&mut self) -> Result<()> {
+        if let Some(event) = self.rx.recv().await {
+            match event {
+                Event::Terminal(event) => {
+                    match event {
+                        crossterm::event::Event::Key(key) => self.on_key(key)?,
+                        crossterm::event::Event::Mouse(mouse) => self.on_mouse(mouse),
+                        // NOTE: we need both cell size and pixel size, so the resize event fields is not used.
+                        crossterm::event::Event::Resize(_, _) => self.on_resize(),
+                        _ => {}
+                    }
+                }
+                Event::Message(message) => self.message = Some(message),
+            }
         }
 
         Ok(())
@@ -148,7 +174,7 @@ impl App {
                         self.should_exit = true;
                     }
                     KeyCode::Char('w') => {
-                        self.write()?;
+                        self.write(None)?;
                     }
                     KeyCode::Char(':') => {
                         // enter command mode
@@ -216,9 +242,13 @@ impl App {
         Ok(())
     }
 
-    fn write(&self) -> Result<()> {
-        if let Some(path) = &self.path {
+    fn write(&self, path: Option<&Path>) -> Result<()> {
+        if let Some(path) = path.or(self.path.as_deref()) {
             fs::write(path, serde_json::to_string(&self.drawing)?)?;
+            self.tx.send(Event::Message("write success".to_string()))?;
+        } else {
+            self.tx
+                .send(Event::Message("no path specified".to_string()))?;
         }
         Ok(())
     }

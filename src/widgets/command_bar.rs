@@ -5,11 +5,12 @@ use crate::app::config::{Config, mode::Mode};
 
 pub struct CommandBar<'a> {
     config: &'a Config,
+    message: Option<&'a str>,
 }
 
 impl<'a> CommandBar<'a> {
-    pub fn new(config: &'a Config) -> Self {
-        Self { config }
+    pub fn new(config: &'a Config, message: Option<&'a str>) -> Self {
+        Self { config, message }
     }
 }
 
@@ -25,7 +26,11 @@ impl<'a> StatefulWidget for CommandBar<'a> {
         Self: Sized,
     {
         match &*self.config.mode.borrow() {
-            Mode::Normal => {}
+            Mode::Normal => {
+                if let Some(message) = self.message {
+                    format!("-- {} --", message).render(area, buf);
+                }
+            }
             Mode::Command(command) => {
                 let command = command.borrow();
                 format!(":{}", command).render(area, buf);

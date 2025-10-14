@@ -9,9 +9,14 @@ mod drawing;
 mod utils;
 mod widgets;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
     let app = App::new(args.path)?;
-    ratatui::run(|terminal| app.run(terminal))?;
+
+    let mut terminal = ratatui::init();
+    app.run(&mut terminal).await?;
+    ratatui::restore();
+
     Ok(())
 }
