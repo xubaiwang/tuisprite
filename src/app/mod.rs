@@ -1,6 +1,5 @@
 use std::{
     cell::RefCell,
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -44,7 +43,7 @@ pub struct App {
     should_exit: bool,
     path: Option<PathBuf>,
     /// The data of actual drawing.
-    drawing: Drawing,
+    drawing: Option<Drawing>,
 
     // Retained areas.
     window_size: Option<WindowSize>,
@@ -62,19 +61,15 @@ pub struct App {
 
 impl App {
     pub fn new(path: Option<PathBuf>) -> Result<Self> {
-        let drawing = match &path {
-            Some(path) => load_drawing_from_file(path).unwrap_or_default(),
-            None => Drawing::default(),
-        };
         let config = Arc::new(RefCell::new(Config::default()));
         let runtime = RefCell::new(Runtime::new(config.clone()));
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         Ok(Self {
+            drawing: None,
             should_exit: false,
             path,
-            drawing,
             window_size: window_size().ok(),
             canvas_area: None,
             config,
@@ -87,8 +82,12 @@ impl App {
 
     /// Run the app loop.
     pub async fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+        self.drawing = Some(match &self.path {
+            Some(path) => load_drawing_from_file(path).await.unwrap_or_default(),
+            None => Drawing::default(),
+        });
         // validate the drawing
-        if !self.drawing.validate() {
+        if !self.drawing.as_mut().unwrap().validate() {
             panic!("drawing is invliad");
         }
 
@@ -126,7 +125,7 @@ impl App {
         .split(frame.area());
 
         frame.render_stateful_widget(
-            Workspace::new(&self.config.borrow(), &self.drawing),
+            Workspace::new(&self.config.borrow(), &self.drawing.as_ref().unwrap()),
             layout[0],
             &mut self.canvas_area,
         );
@@ -149,7 +148,7 @@ impl App {
             match event {
                 Event::Terminal(event) => {
                     match event {
-                        crossterm::event::Event::Key(key) => self.on_key(key)?,
+                        crossterm::event::Event::Key(key) => self.on_key(key).await?,
                         crossterm::event::Event::Mouse(mouse) => self.on_mouse(mouse),
                         // NOTE: we need both cell size and pixel size, so the resize event fields is not used.
                         crossterm::event::Event::Resize(_, _) => self.on_resize(),
@@ -164,7 +163,8 @@ impl App {
     }
 
     /// Handle key event.
-    fn on_key(&mut self, key: KeyEvent) -> Result<()> {
+    async fn on_key(&mut self, key: KeyEvent) -> Result<()> {
+        let drawing = self.drawing.as_mut().unwrap();
         let config = self.config.borrow();
         let mode = &mut *config.mode.borrow_mut();
         match mode {
@@ -174,24 +174,22 @@ impl App {
                         self.should_exit = true;
                     }
                     KeyCode::Char('w') => {
-                        self.write(None)?;
+                        self.write(None).await?;
                     }
                     KeyCode::Char(':') => {
                         // enter command mode
                         *mode = Mode::Command(Default::default());
                     }
                     KeyCode::Char('+') | KeyCode::Char('=') => {
-                        self.drawing
-                            .resize(self.drawing.width + 1, self.drawing.height + 1);
+                        drawing.resize(drawing.width + 1, drawing.height + 1);
                     }
                     KeyCode::Char('-') => {
-                        if self.drawing.width > 1 {
-                            self.drawing
-                                .resize(self.drawing.width - 1, self.drawing.height - 1);
+                        if drawing.width > 1 {
+                            drawing.resize(drawing.width - 1, drawing.height - 1);
                         }
                     }
                     KeyCode::Char('E') => {
-                        self.drawing.erase_all();
+                        drawing.erase_all();
                     }
                     KeyCode::Char(ch @ '1')
                     | KeyCode::Char(ch @ '2')
@@ -242,9 +240,9 @@ impl App {
         Ok(())
     }
 
-    fn write(&self, path: Option<&Path>) -> Result<()> {
+    async fn write(&self, path: Option<&Path>) -> Result<()> {
         if let Some(path) = path.or(self.path.as_deref()) {
-            fs::write(path, serde_json::to_string(&self.drawing)?)?;
+            tokio::fs::write(path, serde_json::to_string(&self.drawing)?).await?;
             self.tx.send(Event::Message("write success".to_string()))?;
         } else {
             self.tx
@@ -256,7 +254,12 @@ impl App {
     /// Handle mouse event.
     fn on_mouse(&mut self, mouse: MouseEvent) {
         if let Some((px, py)) = self.viewport_to_canvas(mouse.column, mouse.row) {
-            if let Some(pixel) = self.drawing.pixel_mut(px as usize, py as usize) {
+            if let Some(pixel) = self
+                .drawing
+                .as_mut()
+                .unwrap()
+                .pixel_mut(px as usize, py as usize)
+            {
                 match mouse.kind {
                     MouseEventKind::Down(mouse_button) | MouseEventKind::Drag(mouse_button) => {
                         match mouse_button {
