@@ -27,30 +27,25 @@ impl<'a> Widget for StatusBar<'a> {
         // bar background color
         Block::new().on_gray().render(area, buf);
 
-        let bg = self.config.color.borrow().to_ratatui([0, 0, 0]);
-        let fg = self
-            .config
-            .color
-            .borrow()
-            .calculate_fg()
-            .to_ratatui([0, 0, 0]);
+        let bg = self.config.color.to_ratatui([0, 0, 0]);
+        let fg = self.config.color.calculate_fg().to_ratatui([0, 0, 0]);
 
         let mut spans = vec![
             Span::raw(" "),
-            Span::raw(match &*self.config.mode.borrow() {
+            Span::raw(match &self.config.mode {
                 Mode::Normal => "NORMAL",
                 Mode::Command(_) => "COMMAND",
             })
             .bold(),
             Span::raw(" "),
             Span::styled(
-                format!(" {} ", self.config.color.borrow().to_css_hex()),
+                format!(" {} ", self.config.color.to_css_hex()),
                 Style::default().bg(bg).fg(fg),
             )
             .bold(),
         ];
 
-        for (idx, color) in self.config.color_history.borrow().iter().rev().enumerate() {
+        for (idx, color) in self.config.color_history.iter().rev().enumerate() {
             let fg = color.calculate_fg().to_ratatui([0, 0, 0]);
             spans.push(Span::styled(
                 format!("{}", to_superscript(idx + 1)),

@@ -63,6 +63,7 @@ pub struct App {
 }
 
 impl App {
+    /// Create a new app.
     pub fn new(path: Option<PathBuf>) -> Result<Self> {
         let config = Rc::new(RefCell::new(Config::default()));
         let runtime = RefCell::new(Runtime::new(config.clone()));
@@ -150,7 +151,7 @@ impl App {
             match event {
                 Event::Terminal(event) => {
                     match event {
-                        crossterm::event::Event::Key(key) => self.on_key(key).await?,
+                        crossterm::event::Event::Key(key) => self.on_key(key)?,
                         crossterm::event::Event::Mouse(mouse) => self.on_mouse(mouse),
                         // NOTE: we need both cell size and pixel size, so the resize event fields is not used.
                         crossterm::event::Event::Resize(_, _) => self.on_resize(),
@@ -165,22 +166,20 @@ impl App {
     }
 
     /// Handle key event.
-    async fn on_key(&mut self, key: KeyEvent) -> Result<()> {
+    fn on_key(&mut self, key: KeyEvent) -> Result<()> {
         let drawing = self.drawing.as_mut().unwrap();
-        let config = self.config.borrow();
-        let mode = &mut *config.mode.borrow_mut();
-        match mode {
+        match &self.config.borrow().mode {
             Mode::Normal => {
                 match key.code {
                     KeyCode::Char('q') => {
                         self.should_exit = true;
                     }
                     KeyCode::Char('w') => {
-                        self.write(None).await?;
+                        self.write(None)?;
                     }
                     KeyCode::Char(':') => {
                         // enter command mode
-                        *mode = Mode::Command(Default::default());
+                        self.config.borrow_mut().mode = Mode::Command(Default::default());
                     }
                     KeyCode::Char('+') | KeyCode::Char('=') => {
                         drawing.resize(drawing.width + 1, drawing.height + 1);
@@ -203,16 +202,16 @@ impl App {
                     | KeyCode::Char(ch @ '8')
                     | KeyCode::Char(ch @ '9') => {
                         let color = ch.to_digit(10).and_then(|n| {
-                            config
+                            self.config
+                                .borrow_mut()
                                 .color_history
-                                .borrow()
                                 .iter()
                                 // n - 1 except 0 => 9
                                 .nth_back((n as usize).checked_sub(1).unwrap_or(9))
                                 .cloned()
                         });
                         if let Some(color) = color {
-                            config.set_color(color);
+                            self.config.borrow_mut().set_color(color);
                         }
                     }
                     // TODO: number back
@@ -228,13 +227,13 @@ impl App {
                     self.runtime
                         .borrow_mut()
                         .execute_script(&command.borrow())?;
-                    *mode = Mode::Normal;
+                    self.config.borrow_mut().mode = Mode::Normal;
                 }
                 KeyCode::Char(ch) => {
                     command.borrow_mut().push(ch);
                 }
                 KeyCode::Esc => {
-                    *mode = Mode::Normal;
+                    self.config.borrow_mut().mode = Mode::Normal;
                 }
                 _ => {}
             },
@@ -242,10 +241,18 @@ impl App {
         Ok(())
     }
 
-    async fn write(&self, path: Option<&Path>) -> Result<()> {
+    fn write(&self, path: Option<&Path>) -> Result<()> {
+        let tx = self.tx.clone();
+        // TODO: make drawing arc
+        let serialized = serde_json::to_string(&self.drawing)?;
         if let Some(path) = path.or(self.path.as_deref()) {
-            tokio::fs::write(path, serde_json::to_string(&self.drawing)?).await?;
-            self.tx.send(Event::Message("write success".to_string()))?;
+            // TODO: make path arc
+            let path = path.to_path_buf();
+            tokio::spawn(async move {
+                tokio::fs::write(path, serialized).await.unwrap();
+                tx.send(Event::Message("write success".to_string()))
+                    .unwrap();
+            });
         } else {
             self.tx
                 .send(Event::Message("no path specified".to_string()))?;
@@ -266,7 +273,7 @@ impl App {
                     MouseEventKind::Down(mouse_button) | MouseEventKind::Drag(mouse_button) => {
                         match mouse_button {
                             MouseButton::Left => {
-                                *pixel = self.config.borrow().color.borrow().clone();
+                                *pixel = self.config.borrow().color.clone();
                             }
                             MouseButton::Right => {
                                 *pixel = Color::from_rgba8(0, 0, 0, 0);

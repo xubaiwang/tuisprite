@@ -120,7 +120,7 @@ fn color_setter<'gc>(
     let res = storage.get_mut::<AppResource>().unwrap();
 
     if let Ok(color) = csscolorparser::Color::from_html(color.to_string_lossy(agent)) {
-        res.config.borrow().set_color(color);
+        res.config.borrow_mut().set_color(color);
     };
     // TODO: report error info
 

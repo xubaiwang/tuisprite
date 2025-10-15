@@ -25,7 +25,7 @@ impl<'a> StatefulWidget for CommandBar<'a> {
     ) where
         Self: Sized,
     {
-        match &*self.config.mode.borrow() {
+        match &self.config.mode {
             Mode::Normal => {
                 if let Some(message) = self.message {
                     format!("-- {} --", message).render(area, buf);
