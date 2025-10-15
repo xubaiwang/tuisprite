@@ -27,7 +27,7 @@ impl Drawing {
 
     pub fn validate(&mut self) -> bool {
         // XXX: should not modify
-        if self.pixels.len() == 0 {
+        if self.pixels.is_empty() {
             self.pixels = vec![Color::from_rgba8(0, 0, 0, 0); self.width * self.height];
         }
         self.pixels.len() == self.width * self.height

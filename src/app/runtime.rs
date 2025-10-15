@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    sync::{Arc, mpsc},
-};
+use std::{cell::RefCell, rc::Rc, sync::mpsc};
 
 use andromeda_core::{HostData, RuntimeHostHooks};
 use andromeda_runtime::RuntimeMacroTask;
@@ -23,7 +20,7 @@ use nova_vm::{
 use crate::app::config::Config;
 
 struct AppResource {
-    config: Arc<RefCell<Config>>,
+    config: Rc<RefCell<Config>>,
 }
 
 /// The JavaScript script execution runtime.
@@ -33,7 +30,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn new(config: Arc<RefCell<Config>>) -> Self {
+    pub fn new(config: Rc<RefCell<Config>>) -> Self {
         let (_macro_task_tx, _macro_task_rx) = mpsc::channel();
         let host_data = HostData::new(_macro_task_tx);
 
@@ -94,7 +91,7 @@ impl Runtime {
         self.agent
             .run_in_realm(&self.realm, |agent, mut gc| -> anyhow::Result<()> {
                 let realm_obj = agent.current_realm(gc.nogc());
-                let source_text = types::String::from_str(agent, &script, gc.nogc());
+                let source_text = types::String::from_str(agent, script, gc.nogc());
 
                 let script =
                     parse_script(agent, source_text, realm_obj, true, None, gc.nogc()).unwrap();

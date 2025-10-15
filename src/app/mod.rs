@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     path::{Path, PathBuf},
     pin::Pin,
-    sync::Arc,
+    rc::Rc,
 };
 
 use anyhow::Result;
@@ -51,7 +51,7 @@ pub struct App {
     window_size: Option<WindowSize>,
     canvas_area: Option<Rect>,
 
-    config: Arc<RefCell<Config>>,
+    config: Rc<RefCell<Config>>,
 
     runtime: RefCell<Runtime>,
 
@@ -64,7 +64,7 @@ pub struct App {
 
 impl App {
     pub fn new(path: Option<PathBuf>) -> Result<Self> {
-        let config = Arc::new(RefCell::new(Config::default()));
+        let config = Rc::new(RefCell::new(Config::default()));
         let runtime = RefCell::new(Runtime::new(config.clone()));
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();

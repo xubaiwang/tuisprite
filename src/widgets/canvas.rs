@@ -45,7 +45,7 @@ impl<'a> StatefulWidget for Canvas<'a> {
                 let bg = {
                     let col = c / self.config.transparency_grid.size;
                     let row = 2 * r / self.config.transparency_grid.size;
-                    if (col + row) % 2 == 0 {
+                    if (col + row).is_multiple_of(2) {
                         self.config.transparency_grid.dark
                     } else {
                         self.config.transparency_grid.light
