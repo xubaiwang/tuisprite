@@ -145,6 +145,9 @@ impl App {
     }
 
     async fn handle_event(&mut self) -> Result<()> {
+        // reset message
+        self.message = None;
+
         if let Some(event) = self.stream.next().await {
             match event {
                 Event::Terminal(event) => {
