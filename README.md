@@ -24,3 +24,10 @@ Create sprites images in your terminal.
   - `-` decrease size
   - `+/=` increase size
   - `E` erase all
+
+
+## How this works
+
+- The pixel cell is emulated with upper (`▀`) and lower (`▄`) [Unicode Block Element](https://en.wikipedia.org/wiki/Block_Elements) and ANSI escape code colors.
+- Terminal has to support SGR Pixel Mouse Report.
+  - TODO: SGR Cell mode compatbility (left and right)
