@@ -7,6 +7,7 @@ use crossterm::{
     terminal::{WindowSize, window_size},
 };
 use csscolorparser::Color;
+use itertools::Itertools;
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Rect},
@@ -263,12 +264,33 @@ impl App {
                     }
                 }
             },
-            Action::Execute(script) => {
-                self.runtime.borrow_mut().execute_script(&script)?;
+            Action::Execute(command) => {
+                match command.strip_prefix('=') {
+                    Some(script) => {
+                        self.runtime.borrow_mut().execute_script(script)?;
+                    }
+                    None => {
+                        self.run_command(&command)?;
+                    }
+                }
                 self.config.borrow_mut().mode = Mode::Normal;
             }
         }
 
+        Ok(())
+    }
+
+    fn run_command(&mut self, command: &str) -> Result<()> {
+        // TODO: should use something like shlex or vim syntax parser
+        let command = command.split_ascii_whitespace().collect_vec();
+        match command.as_slice() {
+            ["w"] => self.perform(Action::Save(None))?,
+            ["w", path] => self.perform(Action::Save(Some(PathBuf::from(path))))?,
+            ["q"] => {
+                self.perform(Action::Quit)?;
+            }
+            _ => {}
+        }
         Ok(())
     }
 
