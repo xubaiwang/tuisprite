@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 use crossterm::{
     self,
-    event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
+    event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     terminal::{WindowSize, window_size},
 };
 use csscolorparser::Color;
@@ -106,17 +106,6 @@ impl App {
         }
 
         enable_mouse()?;
-
-        let tx = self.tx.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Ok(event) = event::read()
-                    && tx.send(Event::Terminal(event)).is_err()
-                {
-                    break;
-                }
-            }
-        });
 
         while !self.should_exit {
             terminal.draw(|frame| self.render(frame))?;
