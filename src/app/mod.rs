@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::Result;
@@ -71,9 +70,9 @@ impl App {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
         let crossterm_stream = ::crossterm::event::EventStream::new()
-            .timeout(Duration::from_millis(1000))
+            // .timeout(Duration::from_millis(1000))
             .filter_map(|e| match e {
-                Ok(Ok(event)) => Some(Event::Terminal(event)),
+                Ok(event) => Some(Event::Terminal(event)),
                 _ => None,
             });
         let rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
