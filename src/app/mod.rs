@@ -1,21 +1,24 @@
 use std::{
     cell::RefCell,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Result;
+use crossterm::{
+    self,
+    event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
+    terminal::{WindowSize, window_size},
+};
 use csscolorparser::Color;
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::{
-        self,
-        event::{self, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind},
-        terminal::{WindowSize, window_size},
-    },
     layout::{Constraint, Layout, Rect},
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio_stream::{Stream, StreamExt};
 
 pub mod config;
 pub mod runtime;
@@ -33,7 +36,7 @@ use crate::{
 #[derive(Debug)]
 enum Event {
     /// Wrap crossterm event.
-    Terminal(crossterm::event::Event),
+    Terminal(::crossterm::event::Event),
     /// Report error message.
     Message(String),
 }
@@ -54,7 +57,8 @@ pub struct App {
     runtime: RefCell<Runtime>,
 
     tx: UnboundedSender<Event>,
-    rx: UnboundedReceiver<Event>,
+
+    stream: Pin<Box<dyn Stream<Item = Event>>>,
 
     message: Option<String>,
 }
@@ -66,6 +70,16 @@ impl App {
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
+        let crossterm_stream = ::crossterm::event::EventStream::new()
+            .timeout(Duration::from_millis(1000))
+            .filter_map(|e| match e {
+                Ok(Ok(event)) => Some(Event::Terminal(event)),
+                _ => None,
+            });
+        let rx_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+
+        let stream = Box::pin(crossterm_stream.merge(rx_stream));
+
         Ok(Self {
             drawing: None,
             should_exit: false,
@@ -75,8 +89,8 @@ impl App {
             config,
             runtime,
             tx,
-            rx,
             message: None,
+            stream,
         })
     }
 
@@ -125,7 +139,7 @@ impl App {
         .split(frame.area());
 
         frame.render_stateful_widget(
-            Workspace::new(&self.config.borrow(), &self.drawing.as_ref().unwrap()),
+            Workspace::new(&self.config.borrow(), self.drawing.as_ref().unwrap()),
             layout[0],
             &mut self.canvas_area,
         );
@@ -144,7 +158,7 @@ impl App {
     }
 
     async fn handle_event(&mut self) -> Result<()> {
-        if let Some(event) = self.rx.recv().await {
+        if let Some(event) = self.stream.next().await {
             match event {
                 Event::Terminal(event) => {
                     match event {
