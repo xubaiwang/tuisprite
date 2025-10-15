@@ -248,6 +248,11 @@ impl App {
                         .send(Event::Message("drawing is None".to_string()))?
                 }
             }
+            Action::GetColor => {
+                let color = self.config.borrow().color.to_css_hex();
+                self.tx
+                    .send(Event::Message(format!("Current color: {}", color)))?;
+            }
             Action::SetColor(either) => match either {
                 either::Either::Left(color) => {
                     self.config.borrow_mut().set_color(color);
@@ -289,6 +294,15 @@ impl App {
             ["q"] => {
                 self.perform(Action::Quit)?;
             }
+            ["color"] => {
+                self.perform(Action::GetColor)?;
+            }
+            ["color", arg] => match csscolorparser::parse(arg) {
+                Ok(color) => {
+                    self.perform(Action::SetColor(either::Either::Left(color)))?;
+                }
+                Err(error) => self.tx.send(Event::Message(error.to_string()))?,
+            },
             _ => {}
         }
         Ok(())

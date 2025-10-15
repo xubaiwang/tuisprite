@@ -16,6 +16,8 @@ Create sprites images in your terminal.
   - `:w` save
   - `:w <path>` save to path
   - `:q` quit
+  - `:color` get color
+  - `:color red` set color
 - script mode `:=<script>` run JavaScript code
   - `:= color = "red"` set color to red
 - key bindings

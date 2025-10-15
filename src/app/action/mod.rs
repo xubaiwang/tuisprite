@@ -16,6 +16,7 @@ pub enum Action {
     Resize(usize, usize),
     /// Erase the drawing.
     Erase,
+    GetColor,
     SetColor(Either<Color, u8>),
     /// Execute JavaScript.
     Execute(String),
