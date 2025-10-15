@@ -57,7 +57,7 @@ dependencies = [
 [[package]]
 name = "andromeda-core"
 version = "0.1.0-draft49"
-source = "git+https://github.com/xubaiwang/andromeda?rev=ecf41080a8fed44c7be743972ea01e7009e20776#ecf41080a8fed44c7be743972ea01e7009e20776"
+source = "git+https://github.com/tryandromeda/andromeda?rev=ccbc28c2c45c65b71885478d23e7e0045971edf0#ccbc28c2c45c65b71885478d23e7e0045971edf0"
 dependencies = [
  "anyhow",
  "anymap",
@@ -80,7 +80,7 @@ dependencies = [
 [[package]]
 name = "andromeda-runtime"
 version = "0.1.0-draft49"
-source = "git+https://github.com/xubaiwang/andromeda?rev=ecf41080a8fed44c7be743972ea01e7009e20776#ecf41080a8fed44c7be743972ea01e7009e20776"
+source = "git+https://github.com/tryandromeda/andromeda?rev=ccbc28c2c45c65b71885478d23e7e0045971edf0#ccbc28c2c45c65b71885478d23e7e0045971edf0"
 dependencies = [
  "andromeda-core",
  "anyhow",
