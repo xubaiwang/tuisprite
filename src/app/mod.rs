@@ -168,8 +168,6 @@ impl App {
         let drawing = self.drawing.as_mut().unwrap();
         let action = match &self.config.borrow().mode {
             Mode::Normal => match key.code {
-                KeyCode::Char('q') => Action::Quit,
-                KeyCode::Char('w') => Action::Save(None),
                 KeyCode::Char(':') => Action::EnterCommandMode,
                 KeyCode::Char('+') | KeyCode::Char('=') => {
                     Action::Resize(drawing.width + 1, drawing.height + 1)
@@ -213,7 +211,9 @@ impl App {
         // as execute_script also borrow mutably.
         match action {
             Action::Quit => self.should_exit = true,
-            Action::Save(path) => self.write(path)?,
+            Action::Save(path) => {
+                self.write(path)?;
+            }
             Action::EnterCommandMode => {
                 self.config.borrow_mut().mode = Mode::Command(String::new())
             }
