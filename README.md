@@ -9,10 +9,13 @@ Create sprites images in your terminal.
 
 ## Usage
 
-- `w` to save
-- `q` to quit
-- `-` decrease size
-- `+/=` increase size
-- `E` erase all
-- `:` to eval JS/TS code
-  - `:color = "red"` to change color, css color
+- command mode `:<command>`
+  - `:w` save
+  - `:w <path>` save to path
+  - `:q` quit
+- script mode `:=<script>` run JavaScript code
+  - `:= color = "red"` set color to red
+- key bindings
+  - `-` decrease size
+  - `+/=` increase size
+  - `E` erase all
