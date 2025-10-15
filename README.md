@@ -9,6 +9,9 @@ Create sprites images in your terminal.
 
 ## Usage
 
+- cli
+  - `tuisprite` open an empty drawing
+  - `tuisprite <path.json>` open drawing at path
 - command mode `:<command>`
   - `:w` save
   - `:w <path>` save to path
