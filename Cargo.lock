@@ -3058,6 +3058,7 @@ dependencies = [
  "clap",
  "crossterm 0.29.0",
  "csscolorparser",
+ "either",
  "itertools 0.14.0",
  "nova_vm",
  "ratatui",

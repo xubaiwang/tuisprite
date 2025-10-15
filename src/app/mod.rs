@@ -1,9 +1,4 @@
-use std::{
-    cell::RefCell,
-    path::{Path, PathBuf},
-    pin::Pin,
-    rc::Rc,
-};
+use std::{cell::RefCell, path::PathBuf, pin::Pin, rc::Rc};
 
 use anyhow::Result;
 use crossterm::{
@@ -19,11 +14,13 @@ use ratatui::{
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_stream::{Stream, StreamExt};
 
+pub mod action;
 pub mod config;
 pub mod runtime;
 
 use crate::{
     app::{
+        action::Action,
         config::{Config, mode::Mode},
         runtime::Runtime,
     },
@@ -168,84 +165,118 @@ impl App {
     /// Handle key event.
     fn on_key(&mut self, key: KeyEvent) -> Result<()> {
         let drawing = self.drawing.as_mut().unwrap();
-        match &self.config.borrow().mode {
-            Mode::Normal => {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        self.should_exit = true;
-                    }
-                    KeyCode::Char('w') => {
-                        self.write(None)?;
-                    }
-                    KeyCode::Char(':') => {
-                        // enter command mode
-                        self.config.borrow_mut().mode = Mode::Command(Default::default());
-                    }
-                    KeyCode::Char('+') | KeyCode::Char('=') => {
-                        drawing.resize(drawing.width + 1, drawing.height + 1);
-                    }
-                    KeyCode::Char('-') => {
-                        if drawing.width > 1 {
-                            drawing.resize(drawing.width - 1, drawing.height - 1);
-                        }
-                    }
-                    KeyCode::Char('E') => {
-                        drawing.erase_all();
-                    }
-                    KeyCode::Char(ch @ '1')
-                    | KeyCode::Char(ch @ '2')
-                    | KeyCode::Char(ch @ '3')
-                    | KeyCode::Char(ch @ '4')
-                    | KeyCode::Char(ch @ '5')
-                    | KeyCode::Char(ch @ '6')
-                    | KeyCode::Char(ch @ '7')
-                    | KeyCode::Char(ch @ '8')
-                    | KeyCode::Char(ch @ '9') => {
-                        let color = ch.to_digit(10).and_then(|n| {
-                            self.config
-                                .borrow_mut()
-                                .color_history
-                                .iter()
-                                // n - 1 except 0 => 9
-                                .nth_back((n as usize).checked_sub(1).unwrap_or(9))
-                                .cloned()
-                        });
-                        if let Some(color) = color {
-                            self.config.borrow_mut().set_color(color);
-                        }
-                    }
-                    // TODO: number back
-                    _ => {}
+        let action = match &self.config.borrow().mode {
+            Mode::Normal => match key.code {
+                KeyCode::Char('q') => Action::Quit,
+                KeyCode::Char('w') => Action::Save(None),
+                KeyCode::Char(':') => Action::EnterCommandMode,
+                KeyCode::Char('+') | KeyCode::Char('=') => {
+                    Action::Resize(drawing.width + 1, drawing.height + 1)
                 }
-            }
-
-            Mode::Command(command) => match key.code {
-                KeyCode::Backspace => {
-                    command.borrow_mut().pop();
+                KeyCode::Char('-') => {
+                    if drawing.width > 1 {
+                        Action::Resize(drawing.width - 1, drawing.height - 1)
+                    } else {
+                        return Ok(());
+                    }
                 }
-                KeyCode::Enter => {
-                    self.runtime
-                        .borrow_mut()
-                        .execute_script(&command.borrow())?;
-                    self.config.borrow_mut().mode = Mode::Normal;
+                KeyCode::Char('E') => Action::Erase,
+                KeyCode::Char(ch @ '1')
+                | KeyCode::Char(ch @ '2')
+                | KeyCode::Char(ch @ '3')
+                | KeyCode::Char(ch @ '4')
+                | KeyCode::Char(ch @ '5')
+                | KeyCode::Char(ch @ '6')
+                | KeyCode::Char(ch @ '7')
+                | KeyCode::Char(ch @ '8')
+                | KeyCode::Char(ch @ '9') => {
+                    let index = ch.to_digit(10).unwrap() as u8;
+                    Action::SetColor(either::Either::Right(index))
                 }
-                KeyCode::Char(ch) => {
-                    command.borrow_mut().push(ch);
-                }
-                KeyCode::Esc => {
-                    self.config.borrow_mut().mode = Mode::Normal;
-                }
-                _ => {}
+                _ => return Ok(()),
             },
-        }
+            Mode::Command(command) => match key.code {
+                KeyCode::Esc => Action::EnterNormalMode,
+                KeyCode::Char(ch) => Action::CommandPush(ch),
+                KeyCode::Backspace => Action::CommandPop,
+                KeyCode::Enter => Action::Execute(command.clone()),
+                _ => return Ok(()),
+            },
+        };
+        self.perform(action)?;
         Ok(())
     }
 
-    fn write(&self, path: Option<&Path>) -> Result<()> {
+    fn perform(&mut self, action: Action) -> Result<()> {
+        // NOTE: borrow_mut must be called in each individual branch,
+        // as execute_script also borrow mutably.
+        match action {
+            Action::Quit => self.should_exit = true,
+            Action::Save(path) => self.write(path)?,
+            Action::EnterCommandMode => {
+                self.config.borrow_mut().mode = Mode::Command(String::new())
+            }
+            Action::EnterNormalMode => self.config.borrow_mut().mode = Mode::Normal,
+            Action::CommandPush(ch) => match &mut self.config.borrow_mut().mode {
+                Mode::Normal => self
+                    .tx
+                    .send(Event::Message("Not command mode".to_string()))?,
+                Mode::Command(command) => command.push(ch),
+            },
+            Action::CommandPop => match &mut self.config.borrow_mut().mode {
+                Mode::Normal => self
+                    .tx
+                    .send(Event::Message("Not command mode".to_string()))?,
+                Mode::Command(command) => {
+                    command.pop();
+                }
+            },
+            Action::Resize(w, h) => {
+                if let Some(drawing) = self.drawing.as_mut() {
+                    drawing.resize(w, h);
+                } else {
+                    self.tx
+                        .send(Event::Message("drawing is None".to_string()))?
+                }
+            }
+            Action::Erase => {
+                if let Some(drawing) = self.drawing.as_mut() {
+                    drawing.erase_all();
+                } else {
+                    self.tx
+                        .send(Event::Message("drawing is None".to_string()))?
+                }
+            }
+            Action::SetColor(either) => match either {
+                either::Either::Left(color) => {
+                    self.config.borrow_mut().set_color(color);
+                }
+                either::Either::Right(index) => {
+                    let mut config = self.config.borrow_mut();
+                    let color = config
+                        .color_history
+                        .iter()
+                        .nth_back(index as usize)
+                        .cloned();
+                    if let Some(color) = color {
+                        config.set_color(color);
+                    }
+                }
+            },
+            Action::Execute(script) => {
+                self.runtime.borrow_mut().execute_script(&script)?;
+                self.config.borrow_mut().mode = Mode::Normal;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write(&self, path: Option<PathBuf>) -> Result<()> {
         let tx = self.tx.clone();
         // TODO: make drawing arc
         let serialized = serde_json::to_string(&self.drawing)?;
-        if let Some(path) = path.or(self.path.as_deref()) {
+        if let Some(path) = path.or(self.path.to_owned()) {
             // TODO: make path arc
             let path = path.to_path_buf();
             tokio::spawn(async move {

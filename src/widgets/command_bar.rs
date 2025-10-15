@@ -32,7 +32,6 @@ impl<'a> StatefulWidget for CommandBar<'a> {
                 }
             }
             Mode::Command(command) => {
-                let command = command.borrow();
                 format!(":{}", command).render(area, buf);
                 *state = Some((1 + command.width() as u16, area.y));
             }
